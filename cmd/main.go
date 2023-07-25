@@ -2,13 +2,13 @@ package main
 
 import (
 	"flag"
-	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
-	"github.com/iamthen0ise/faux/pkg/api"
-	applog "github.com/iamthen0ise/faux/pkg/log"
+	"github.com/iamthen0ise/faux/internal/api"
+	applog "github.com/iamthen0ise/faux/internal/log"
 )
 
 func main() {
@@ -25,16 +25,24 @@ func main() {
 	router := api.NewRouter()
 	authMiddleware.Next = router
 
-	// Load routes from a JSON file.
 	if *routesFilePath != "" {
-		routesData, err := ioutil.ReadFile(*routesFilePath)
+		fileInfo, err := os.Stat(*routesFilePath)
 		if err != nil {
-			log.Fatalf("Error reading routes file: %v", err)
+			log.Fatalf("Failed to get the file info: %v", err)
 		}
 
-		err = router.LoadRoutesFromJSON(routesData)
-		if err != nil {
-			log.Fatalf("Error loading routes: %v", err)
+		if fileInfo.IsDir() {
+			// Load routes from a directory
+			err = router.LoadRoutesFromDir(*routesFilePath)
+			if err != nil {
+				log.Fatalf("Failed to load routes: %v", err)
+			}
+		} else {
+			// Load routes from specific files
+			err := router.LoadRoutesFromFiles([]string{*routesFilePath})
+			if err != nil {
+				log.Fatalf("Failed to load routes: %v", err)
+			}
 		}
 	}
 
