@@ -18,8 +18,6 @@ endif
 BUILD_FLAGS?=
 TEST_FLAGS?=
 
-BUILDX_CMD ?= go
-
 DESTDIR ?=
 
 all: build
@@ -30,11 +28,11 @@ build:
 
 .PHONY: test
 test:
-	$(BUILDX_CMD) test -v ./...
+	go test -coverprofile=coverage.out ./... && go tool cover -func=coverage.out
 
 .PHONY: lint
 lint:
-	$(BUILDX_CMD) golangci-lint
+	go golangci-lint
 
 help:
 	@echo Please specify a build target. The choices are:
