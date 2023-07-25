@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/iamthen0ise/faux/pkg/api"
+	"github.com/iamthen0ise/faux/internal/api"
 )
 
 func TestAddRoute(t *testing.T) {

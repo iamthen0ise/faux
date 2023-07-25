@@ -13,7 +13,7 @@ Faux is a customizable HTTP server written in Go. It acts like HTTPBIN but with 
 1. Clone this repository:
 
 ```bash
-git clone https://github.com/yourusername/faux.git
+git clone https://github.com/iamthen0ise/faux.git
 ```
 
 Build the project:
