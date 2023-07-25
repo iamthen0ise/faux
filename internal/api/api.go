@@ -45,9 +45,13 @@ type MagicRequest struct {
 func (r *Router) parseRequestIntoMagicReq(req *http.Request, magicReq *MagicRequest) error {
 	if req.Header.Get("Content-Type") == "application/json" {
 		defer req.Body.Close()
-		err := json.NewDecoder(req.Body).Decode(magicReq)
-		if err != nil {
-			return errors.New("Invalid JSON payload")
+		if req.Body != http.NoBody {
+			err := json.NewDecoder(req.Body).Decode(magicReq)
+			if err != nil {
+				return errors.New("Invalid JSON payload")
+			}
+		} else {
+			magicReq.ResponseBody = http.NoBody
 		}
 	} else {
 		// Parse dot notation query parameters.
@@ -143,7 +147,11 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		w.Write(responseBody)
+		_, err = w.Write(responseBody)
+		if err != nil {
+			http.Error(w, "Error writing response body", http.StatusInternalServerError)
+			return
+		}
 		return
 	}
 
@@ -176,7 +184,11 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			http.Error(w, "Error processing response body", http.StatusInternalServerError)
 			return
 		}
-		w.Write(responseBody)
+		_, err = w.Write(responseBody)
+		if err != nil {
+			http.Error(w, "Error writing response", http.StatusInternalServerError)
+			return
+		}
 	}
 }
 
@@ -187,7 +199,8 @@ func (r *Router) LoadRoutesFromJSON(data []byte) error {
 	}
 
 	for _, route := range routes {
-		r.AddRoute(&route)
+		newRoute := route
+		r.AddRoute(&newRoute)
 	}
 
 	return nil
