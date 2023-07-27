@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"time"
@@ -10,13 +11,71 @@ import (
 	"github.com/iamthen0ise/faux/internal/api"
 	"github.com/iamthen0ise/faux/internal/applogger"
 	"github.com/iamthen0ise/faux/internal/args"
+
+	"golang.org/x/term"
 )
 
-// AppConfig encapsulates the command line arguments
+func terminalSizeOK() bool {
+	rows, cols, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil {
+		// If there's an error, assume the terminal is big enough.
+		return true
+	}
+
+	// Check if the terminal size is 50x80 or larger
+	return rows >= 50 && cols >= 70
+}
+
+func printWelcomeMessage(port int) {
+	asciiArt := `
+A FRIENDLY HTTP MOCKING SERVER FOR DEVELOPMENT AND TESTING
+	
+▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄	▄▄▄▄▄▄▄  ▄  ▄▄▄ ▄  ▄  ▄▄▄▄▄▄▄  
+███████╗░█████╗░██╗░░░██╗██╗░░██╗	█ ▄▄▄ █ ▄▄█▀█▄██▀▀█▀▀ █ ▄▄▄ █  
+██╔════╝██╔══██╗██║░░░██║╚██╗██╔╝	█ ███ █  ▀█▀ ▀█▄▄▄█▄  █ ███ █  
+██╔════╝██╔══██╗██║░░░██║╚██╗██╔╝	█▄▄▄▄▄█ ▄▀▄ ▄▀▄▀▄▀▄▀█ █▄▄▄▄▄█  
+█████╗░░███████║██║░░░██║░╚███╔╝░	▄▄▄ ▄▄▄▄█▀█▄▀▀██ █ ▀▄▄▄   ▄    
+█████╗░░███████║██║░░░██║░╚███╔╝░	█▀  ▀▄▄█▄▄▀▀ ▄▀ ▀▀  ▀▄█ ▄▀▄▄█  
+██╔══╝░░██╔══██║██║░░░██║░██╔██╗░	▀  █▄▀▄▀█  ▀▄  ▀▀█▀█▄▄▄▀▀▄ █▄  
+██╔══╝░░██╔══██║██║░░░██║░██╔██╗░	 ▀▄ ▄█▄▄▀█▄██▀▄ ▀▄  ▀▀█ ▄█ ▄█  
+██║░░░░░██║░░██║╚██████╔╝██╔╝╚██╗	▄▄ ▀▄▀▄ ██▀▄▀▀█▀▄█▄▄█▀█▄ █ █▄  
+╚═╝░░░░░╚═╝░░╚═╝░╚═════╝░╚═╝░░╚═╝	▄▀▀▀ █▄▀ █▄▀ ▄▀ █▀█  █▀▄▄▀▀▄█  
+╚═╝░░░░░╚═╝░░╚═╝░╚═════╝░╚═╝░░╚═╝	▄▀▄███▄  ██▀▄   ██ ██████▀ ▀   
+					▄▄▄▄▄▄▄ ██▀██▀▄ ▀ ▄██ ▄ █▄▀██  
+					█ ▄▄▄ █ ███▄▀▀█▄██▀ █▄▄▄█▀ █▄  
+					█ ███ █ ▄ ▀▀ ▄▀  ██▄▀  ██▄▀▀█  
+					█▄▄▄▄▄█ █▄ ▀▄  ▀██▀███ ▄█  █▄ 
+
+RUN WITH --quiet-start TO HIDE THIS^^^
+	`
+	fmt.Println(asciiArt)
+	fmt.Println("Welcome to FAUX, your friendly mock server.")
+	fmt.Println("To call Magic Route, use the following format:")
+	fmt.Println("http://<host>:<port>/status/<statusCode>?responseTime=<delayInMilliseconds>")
+
+	methods := []string{"GET", "POST", "PUT", "DELETE"}
+
+	// Generate a random method
+	rand.Seed(time.Now().UnixNano())
+	randomMethod := methods[rand.Intn(len(methods))]
+
+	// Generate a random status code between 200 and 500
+	statusCode := rand.Intn(301) + 200 // random integer between 200 and 500
+
+	// Set example headers and body
+	examlePayload := `{"response_headers":{"Content-Type":"application/json"},"response_body":"{\"message\": \"Hello from Faux\"}"}`
+
+	fmt.Printf("\nExample curl command:\n")
+	fmt.Printf("curl -X %s -d '%s' http://localhost:%d/status/%d\n", randomMethod, examlePayload, port, statusCode)
+}
 
 func main() {
 	appConfig := &args.AppConfig{}
 	args.ParseInput(appConfig)
+
+	if !appConfig.QuietStart && terminalSizeOK() {
+		printWelcomeMessage(appConfig.Port)
+	}
 
 	// Initialize a new Logger.
 	logger := applogger.NewLogger("[{{.Time}}] {{.Method}} {{.StatusCode}} {{.Path}} {{.ResponseTime}}\n", appConfig.Colorize)
