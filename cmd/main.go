@@ -1,45 +1,45 @@
 package main
 
 import (
-	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"time"
 
 	"github.com/iamthen0ise/faux/internal/api"
-	applog "github.com/iamthen0ise/faux/internal/log"
+	"github.com/iamthen0ise/faux/internal/applogger"
+	"github.com/iamthen0ise/faux/internal/args"
 )
 
+// AppConfig encapsulates the command line arguments
+
 func main() {
-	authToken := flag.String("t", "", "authentication token")
+	appConfig := &args.AppConfig{}
+	args.ParseInput(appConfig)
 
-	flag.Parse()
-
-	routesFilePath := flag.String("routes", "", "Path to JSON file containing routes")
 	// Initialize a new Logger.
-	logger := applog.NewLogger("[{{.Time}}] {{.Method}} {{.StatusCode}} {{.Path}} {{.ResponseTime}}\n", true)
+	logger := applogger.NewLogger("[{{.Time}}] {{.Method}} {{.StatusCode}} {{.Path}} {{.ResponseTime}}\n", appConfig.Colorize)
 
-	authMiddleware := &api.AuthMiddleware{Token: *authToken}
-
+	authMiddleware := &api.AuthMiddleware{Token: appConfig.AuthToken}
 	router := api.NewRouter()
 	authMiddleware.Next = router
 
-	if *routesFilePath != "" {
-		fileInfo, err := os.Stat(*routesFilePath)
+	if appConfig.RoutesPath != "" {
+		fileInfo, err := os.Stat(appConfig.RoutesPath)
 		if err != nil {
 			log.Fatalf("Failed to get the file info: %v", err)
 		}
 
 		if fileInfo.IsDir() {
 			// Load routes from a directory
-			err = router.LoadRoutesFromDir(*routesFilePath)
+			err = router.LoadRoutesFromDir(appConfig.RoutesPath)
 			if err != nil {
 				log.Fatalf("Failed to load routes: %v", err)
 			}
 		} else {
 			// Load routes from specific files
-			err := router.LoadRoutesFromFiles([]string{*routesFilePath})
+			err := router.LoadRoutesFromFiles([]string{appConfig.RoutesPath})
 			if err != nil {
 				log.Fatalf("Failed to load routes: %v", err)
 			}
@@ -57,7 +57,7 @@ func main() {
 	}))
 
 	// Start the HTTP server.
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Fatal(http.ListenAndServe(appConfig.Host+":"+fmt.Sprint(appConfig.Port), nil))
 }
 
 // statusRecorder is an HTTP ResponseWriter that captures the status code written to it.
