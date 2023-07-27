@@ -2,7 +2,6 @@ package args
 
 import (
 	"flag"
-	"fmt"
 	"os"
 
 	"gopkg.in/yaml.v2"
@@ -16,6 +15,7 @@ type AppConfig struct {
 	LogFormat  string `yaml:"logFormat"`
 	Host       string `yaml:"host"`
 	Port       int    `yaml:"port"`
+	QuietStart bool
 }
 
 func NewAppConfig() *AppConfig {
@@ -26,10 +26,11 @@ func ParseInput(appConfig *AppConfig) error {
 	flag.StringVar(&appConfig.ConfigFile, "config", "", "Path to YAML config file")
 	flag.StringVar(&appConfig.AuthToken, "token", "", "Authentication token")
 	flag.StringVar(&appConfig.RoutesPath, "routes", "", "Path to JSON file containing routes")
-	flag.BoolVar(&appConfig.Colorize, "colorize", false, "Enable log colorizing")
-	flag.StringVar(&appConfig.LogFormat, "log-format", "[{{.Time}}] {{.Method}} {{.StatusCode}} {{.Path}} {{.ResponseTime}}\n", "Log format")
+	flag.BoolVar(&appConfig.Colorize, "colorize", true, "Enable log colorizing")
+	flag.StringVar(&appConfig.LogFormat, "log-format", "{{.Method}} {{.StatusCode}} {{.Path}} {{.ResponseTime}}\n", "Log format")
 	flag.StringVar(&appConfig.Host, "host", "localhost", "Application host")
 	flag.IntVar(&appConfig.Port, "port", 8080, "Application port")
+	flag.BoolVar(&appConfig.QuietStart, "quiet-start", false, "Mute any welcome messages")
 
 	flag.Parse()
 
@@ -41,7 +42,6 @@ func ParseInput(appConfig *AppConfig) error {
 		}
 	}
 
-	fmt.Printf("Parsed appConfig: %+v\n", appConfig)
 	return nil
 }
 
