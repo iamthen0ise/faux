@@ -1,4 +1,4 @@
-package applog
+package applogger
 
 import (
 	"bytes"
@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func TestLogger_LogRequest_Colorize(t *testing.T) {
+func TestAppLogger_LogRequest_Colorize(t *testing.T) {
 	t.Skipf("Couldn't catch why not working")
 
 	tests := []struct {

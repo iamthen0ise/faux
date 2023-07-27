@@ -113,7 +113,6 @@ func ParseDotNotation(m url.Values) map[string]interface{} {
 func (r *Router) AddRoute(route *Route) {
 	r.Routes[route.Path] = route
 }
-
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	route, ok := r.Routes[req.URL.Path]
 
@@ -124,70 +123,67 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	var magicReq MagicRequest
 
-	// If it's a user-defined route, handle it
 	if ok && route.Method == req.Method {
-		// Try to parse JSON payload first.
-		if req.Header.Get("Content-Type") == "application/json" {
-			defer req.Body.Close()
-			err := json.NewDecoder(req.Body).Decode(&magicReq)
-			if err != nil {
-				http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
-				return
-			}
-		}
+		r.handleDefinedRoute(w, req, *route, &magicReq)
+	} else {
+		r.handleMagicRoute(w, req, &magicReq)
+	}
+}
 
-		for key, value := range magicReq.ResponseHeaders {
-			w.Header().Set(key, value)
-		}
-		w.WriteHeader(route.StatusCode)
-
-		responseBody, err := json.Marshal(magicReq.ResponseBody)
-		if err != nil {
-			http.Error(w, "Error processing response body", http.StatusInternalServerError)
+func (r *Router) handleDefinedRoute(w http.ResponseWriter, req *http.Request, route Route, magicReq *MagicRequest) {
+	if req.Header.Get("Content-Type") == "application/json" {
+		if err := json.NewDecoder(req.Body).Decode(&magicReq); err != nil {
+			http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
 			return
 		}
-
-		_, err = w.Write(responseBody)
-		if err != nil {
-			http.Error(w, "Error writing response body", http.StatusInternalServerError)
-			return
-		}
-		return
+		defer req.Body.Close()
 	}
 
-	// Parse status code from the magic route.
-	parts := strings.Split(req.URL.Path, "/")
-	if len(parts) < 3 {
+	setHeaders(w, magicReq.ResponseHeaders)
+	writeResponse(w, route.StatusCode, magicReq.ResponseBody)
+}
+
+func (r *Router) handleMagicRoute(w http.ResponseWriter, req *http.Request, magicReq *MagicRequest) {
+	statusCode, err := r.parseMagicRoute(req.URL.Path)
+	if err != nil {
 		http.Error(w, "Invalid magic route", http.StatusBadRequest)
 		return
 	}
-	statusCode, err := strconv.Atoi(parts[2])
-	if err != nil || statusCode < 100 || statusCode > 599 {
-		http.Error(w, "Invalid status code", http.StatusBadRequest)
-		return
-	}
 
-	// Try to parse query params or JSON payload into magicReq.
-	if err := r.parseRequestIntoMagicReq(req, &magicReq); err != nil {
+	if err := r.parseRequestIntoMagicReq(req, magicReq); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	// Handle magic route.
-	for key, value := range magicReq.ResponseHeaders {
+	setHeaders(w, magicReq.ResponseHeaders)
+	writeResponse(w, statusCode, magicReq.ResponseBody)
+}
+
+func (r *Router) parseMagicRoute(path string) (int, error) {
+	parts := strings.Split(path, "/")
+	if len(parts) < 3 {
+		return 0, errors.New("Invalid magic route")
+	}
+	return strconv.Atoi(parts[2])
+}
+func setHeaders(w http.ResponseWriter, headers map[string]string) {
+	for key, value := range headers {
 		w.Header().Set(key, value)
 	}
+}
+
+func writeResponse(w http.ResponseWriter, statusCode int, responseBody interface{}) {
 	w.WriteHeader(statusCode)
-	if magicReq.ResponseBody != "" {
-		responseBody, err := json.Marshal(magicReq.ResponseBody)
+
+	if responseBody != nil {
+		body, err := json.Marshal(responseBody)
 		if err != nil {
 			http.Error(w, "Error processing response body", http.StatusInternalServerError)
 			return
 		}
-		_, err = w.Write(responseBody)
-		if err != nil {
-			http.Error(w, "Error writing response", http.StatusInternalServerError)
-			return
+
+		if _, err = w.Write(body); err != nil {
+			http.Error(w, "Error writing response body", http.StatusInternalServerError)
 		}
 	}
 }
