@@ -105,6 +105,8 @@ func main() {
 		}
 	}
 
+	http.HandleFunc("/openapi", router.OpenAPIHandler)
+
 	http.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 

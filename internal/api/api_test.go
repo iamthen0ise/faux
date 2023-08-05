@@ -7,6 +7,9 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/iamthen0ise/faux/internal/throttling"
 )
 
 func TestAddRoute(t *testing.T) {
@@ -276,10 +279,6 @@ func TestParseRequestIntoMagicReq_QueryParamsNotPresent(t *testing.T) {
 	if len(magicReq.ResponseHeaders) != 0 {
 		t.Errorf("ResponseHeaders should be empty: got %v", magicReq.ResponseHeaders)
 	}
-
-	// if magicReq.ResponseBody != "" {
-	// 	t.Errorf("ResponseBody should be empty: got %v", magicReq.ResponseBody)
-	// }
 }
 
 func TestParseRequestIntoMagicReq_JsonPresent(t *testing.T) {
@@ -497,5 +496,78 @@ func TestAuthMiddleware(t *testing.T) {
 	middleware.ServeHTTP(rr, req)
 	if status := rr.Code; status != http.StatusOK {
 		t.Errorf("Handler returned wrong status code: got %v want %v", status, http.StatusOK)
+	}
+}
+
+// helper function to measure the duration of an HTTP request
+func measureRequestTime(t *testing.T, router *Router, method, path string) time.Duration {
+	req, err := http.NewRequest(method, path, http.NoBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	start := time.Now()
+	router.ServeHTTP(rr, req)
+	return time.Since(start)
+}
+
+func TestThrottling(t *testing.T) {
+	router := NewRouter()
+	router.AddRoute(&Route{
+		Path:           "/test",
+		Method:         "GET",
+		StatusCode:     200,
+		ThrottlingLow:  50,  // delay for at least 50 ms
+		ThrottlingHigh: 100, // delay up to 100 ms
+	})
+
+	duration := measureRequestTime(t, router, "GET", "/test")
+	if duration < 50*time.Millisecond || duration > 100*time.Millisecond {
+		t.Fatalf("Unexpected request duration: %v", duration)
+	}
+}
+
+func TestRateLimiting(t *testing.T) {
+	rps := float32(2) // adjust this value for your needs
+	rateLimitMiddleware := throttling.RateLimitMiddleware(rps)
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	rateLimitedHandler := rateLimitMiddleware(handler)
+
+	request, err := http.NewRequest("GET", "/test", http.NoBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	recorder := httptest.NewRecorder()
+
+	// First request should be allowed
+	rateLimitedHandler.ServeHTTP(recorder, request)
+	if status := recorder.Code; status != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+
+	time.Sleep(time.Millisecond * 500)
+
+	// Second request should be allowed
+	recorder = httptest.NewRecorder()
+	rateLimitedHandler.ServeHTTP(recorder, request)
+	if status := recorder.Code; status != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+
+	time.Sleep(time.Millisecond * 500)
+
+	// Third request should be limited
+	recorder = httptest.NewRecorder()
+	rateLimitedHandler.ServeHTTP(recorder, request)
+	if status := recorder.Code; status != http.StatusTooManyRequests {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			status, http.StatusTooManyRequests)
 	}
 }

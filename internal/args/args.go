@@ -27,7 +27,7 @@ func ParseInput(appConfig *AppConfig) error {
 	flag.StringVar(&appConfig.AuthToken, "token", "", "Authentication token")
 	flag.StringVar(&appConfig.RoutesPath, "routes", "", "Path to JSON file containing routes")
 	flag.BoolVar(&appConfig.Colorize, "colorize", true, "Enable log colorizing")
-	flag.StringVar(&appConfig.LogFormat, "log-format", "{{.Method}} {{.StatusCode}} {{.Path}} {{.ResponseTime}}\n", "Log format")
+	flag.StringVar(&appConfig.LogFormat, "log-format", "{{.Method}} {{.StatusCode}} {{.Path}} {{.ResponseTime}}", "Log format")
 	flag.StringVar(&appConfig.Host, "host", "localhost", "Application host")
 	flag.IntVar(&appConfig.Port, "port", 8080, "Application port")
 	flag.BoolVar(&appConfig.QuietStart, "quiet-start", false, "Mute any welcome messages")

@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/iamthen0ise/faux/internal/throttling"
 )
 
 type Route struct {
@@ -16,7 +18,10 @@ type Route struct {
 	ResponseHeaders map[string]string `json:"response_headers,omitempty"`
 	ResponseBody    interface{}       `json:"response_body,omitempty"`
 	Lambda          int               `json:"-"`
-	AuthRequired    bool
+	AuthRequired    bool              `json:"auth_required,omitempty"`
+	ThrottlingLow   int               `json:"throttling_low,omitempty"`
+	ThrottlingHigh  int               `json:"throttling_hi,omitempty"`
+	RateLimitPerMin float32           `json:"rate_limit_per_min,omitempty"`
 }
 
 const (
@@ -40,6 +45,11 @@ func NewRouter() *Router {
 type MagicRequest struct {
 	ResponseHeaders map[string]string `json:"response_headers,omitempty"`
 	ResponseBody    interface{}       `json:"response_body,omitempty"`
+	Lambda          int               `json:"-"`
+	AuthRequired    bool              `json:"auth_required,omitempty"`
+	ThrottlingLow   int               `json:"throttling_low,omitempty"`
+	ThrottlingHigh  int               `json:"throttling_hi,omitempty"`
+	RateLimitPerMin float32           `json:"rate_limit_per_min,omitempty"`
 }
 
 func (r *Router) parseRequestIntoMagicReq(req *http.Request, magicReq *MagicRequest) error {
@@ -77,7 +87,6 @@ func (r *Router) parseRequestIntoMagicReq(req *http.Request, magicReq *MagicRequ
 					}
 				}
 			} else {
-				// Handle non-nested query parameters.
 				if k == "response_body" {
 					magicReq.ResponseBody = v[0]
 				}
@@ -113,9 +122,15 @@ func ParseDotNotation(m url.Values) map[string]interface{} {
 func (r *Router) AddRoute(route *Route) {
 	r.Routes[route.Path] = route
 }
-func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	route, ok := r.Routes[req.URL.Path]
 
+func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	// Check for the specific /openapi route
+	if req.URL.Path == "/openapi" {
+		r.OpenAPIHandler(w, req)
+		return
+	}
+
+	route, ok := r.Routes[req.URL.Path]
 	if !ok && !strings.HasPrefix(req.URL.Path, "/status/") {
 		http.NotFound(w, req)
 		return
@@ -124,23 +139,29 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	var magicReq MagicRequest
 
 	if ok && route.Method == req.Method {
-		r.handleDefinedRoute(w, req, *route, &magicReq)
+		throttlingMiddleware := throttling.ThrottlingMiddleware(route.ThrottlingLow, route.ThrottlingHigh)
+		rateLimitMiddleware := throttling.RateLimitMiddleware(route.RateLimitPerMin)
+		routeHandler := r.handleDefinedRoute(route, &magicReq)
+		handler := throttlingMiddleware(rateLimitMiddleware(routeHandler))
+		handler.ServeHTTP(w, req)
 	} else {
 		r.handleMagicRoute(w, req, &magicReq)
 	}
 }
 
-func (r *Router) handleDefinedRoute(w http.ResponseWriter, req *http.Request, route Route, magicReq *MagicRequest) {
-	if req.Header.Get("Content-Type") == "application/json" {
-		if err := json.NewDecoder(req.Body).Decode(&magicReq); err != nil {
-			http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
-			return
+func (r *Router) handleDefinedRoute(route *Route, magicReq *MagicRequest) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if req.Header.Get("Content-Type") == "application/json" {
+			if err := json.NewDecoder(req.Body).Decode(magicReq); err != nil {
+				http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
+				return
+			}
+			defer req.Body.Close()
 		}
-		defer req.Body.Close()
-	}
 
-	setHeaders(w, magicReq.ResponseHeaders)
-	writeResponse(w, route.StatusCode, magicReq.ResponseBody)
+		setHeaders(w, magicReq.ResponseHeaders)
+		writeResponse(w, route.StatusCode, magicReq.ResponseBody)
+	})
 }
 
 func (r *Router) handleMagicRoute(w http.ResponseWriter, req *http.Request, magicReq *MagicRequest) {
